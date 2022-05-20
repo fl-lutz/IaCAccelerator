@@ -1,3 +1,6 @@
+
+
+
 $env:AZURE_DEVOPS_EXT_AZURE_RM_SERVICE_PRINCIPAL_KEY=
 
 az devops service-endpoint azurerm create \
