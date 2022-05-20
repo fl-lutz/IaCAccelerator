@@ -1,0 +1,101 @@
+pool:
+  vmImage: ubuntu-latest
+
+trigger: none
+
+parameters:
+# for running the Pipeline the adjustment of the Semantic Version needs to be set - option none for cancelled or forgotten Deployments
+- name: versionOption
+  type: string
+  default: none
+  values:
+  - major
+  - minor
+  - patch
+  - none
+  displayName: 'The semantic version type (major, minor, or patch) or no Version for rerunning the Pipeline'
+
+
+variables:
+# List availabe Branchnames
+  - name: devBranchName
+    value: 'refs/heads/feature/IaCPipeline'
+  - name: testBranchName
+    value: 'refs/heads/test'
+  - name: prodBranchName
+    value: 'refs/heads/master'
+
+  # make the versionOption accessible for 'handle_Versioning'
+  - name: increment
+    value: ${{ parameters.versionOption }}
+
+# Set Variables for Stage, Approvals and Variable Group according to Branchname
+  # Branch is DEV
+  - ${{ if eq(variables['Build.SourceBranch'], variables['devBranchName']) }}:
+    - name: stageName
+      value: DEV
+    - name: deployApproval
+      value: DMLZ-developers
+    - group: dmlz-dev
+  # Branch is TEST
+  - ${{ if eq(variables['Build.SourceBranch'], variables['testBranchName']) }}:
+    - name: stageName
+      value: TEST
+    - name: deployApproval
+      value: DMLZ-approvers
+    - group: dmlz-TEST
+  # Branch is PROD/Master
+  - ${{ if eq(variables['Build.SourceBranch'], variables['testBranchName']) }}:
+    - name: stageName
+      value: PROD
+    - name: deployApproval
+      value: DMLZ-approvers
+    - group: dmlz-PROD
+
+# setting a pending Buildname that might get changed after stage 'handle_Versioning' finished
+name: $(stageName)-$(Date:yyyyMMdd)-pendingVersion
+
+
+
+stages:
+# Stage to handle pending Version
+# since the Verion adjustment is dependent a successful deployment, this Version adjustment in the Buildname will only be pending
+- stage: handle_pendingVersioning
+  displayName: "Adjusting Version pending"
+  jobs:
+  - template: './Pipeline Templates/pendingVersion.yml'
+
+#Dummy stage for your planning Step
+- stage: plan_Deployment
+  jobs:
+  - job: create_plan
+    displayName: Create, display and save a execution plan
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - bash: |
+          echo 'Hello World!'
+
+#Dummy stage for applying your Plan
+- stage: apply_plan_infrastructure
+  jobs:
+    - deployment: apply_infrastructure
+      displayName: Deploy approved Plan
+      pool:
+        vmImage: ubuntu-latest
+      environment: '$(deployApproval)' # The Approval setting can be updated with Environment option.
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - bash: |
+                  echo 'Hello World!'
+    
+
+
+- stage: handle_Verion_Change
+  displayName: "Adjusting Version in Keyvault"
+  dependsOn: apply_plan_infrastructure
+  condition: succeeded()
+  jobs:
+  - template: './Pipeline Templates/updateVersion.yml'
