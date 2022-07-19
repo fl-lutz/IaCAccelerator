@@ -3,7 +3,7 @@ param(
     [String]$resourceGroupName
 )
 
-$rg=Get-AzResourceGroup -name ZEISS.ESB.DEV
+$rg=Get-AzResourceGroup -name 'ZEISSID-PROD'
 $json = "{ 'resources': []}" | ConvertFrom-Json
 
 function Get-PulumiResourceType () {
@@ -62,6 +62,16 @@ function Get-PulumiResourceType () {
     Write-Output $result
 }
 
+$rgToAdd = @"
+{
+"type":"azure-native:resources:ResourceGroup",
+"name":"$($rg.ResourceGroupName)",
+"id":"$($rg.ResourceId)"
+}
+"@
+
+$json.resources += (ConvertFrom-Json -InputObject $rgToAdd)
+
 foreach ($res in $(Get-AzResource -ResourceGroupName $rg.ResourceGroupName)) {
 	$random = -join (((48..57)+(65..90)+(97..122)) * 80 |Get-Random -Count 12 |%{[char]$_})
 	$pulumiResourceName = $res.ResourceName + "-" + $random
@@ -77,7 +87,7 @@ foreach ($res in $(Get-AzResource -ResourceGroupName $rg.ResourceGroupName)) {
 }
 
 write-host (ConvertTo-Json $json)
-(ConvertTo-Json $json) | Out-File resources.json
+(ConvertTo-Json $json) | Out-File resources.json -encoding ASCII
 $unknownTypes = "{'t': []}" | ConvertFrom-Json
 foreach ($el in $json.resources) {
     if ($el.type.StartsWith("unknown: ")) {
